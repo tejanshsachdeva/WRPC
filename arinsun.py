@@ -1,4 +1,8 @@
 import requests
+import fitz  # PyMuPDF
+import pandas as pd
+import re
+import os
 
 # Dictionary to map month numbers to their names
 months = {
@@ -34,9 +38,54 @@ def fetch_pdf(month, year):
     response = requests.get(url)
     if response.status_code == 200:
         print(f"Successfully fetched {months[month]} {year}")
+        temp_pdf_path = f"{month}{year}.pdf"
+        with open(temp_pdf_path, 'wb') as f:
+            f.write(response.content)
+        return temp_pdf_path
     else:
         print(f"Failed to fetch {months[month]} {year}")
+        return None
 
-# Loop through each month-year combination and fetch the PDF
+def extract_text_from_pdf(pdf_path):
+    # Open the PDF file
+    document = fitz.open(pdf_path)
+    text = ""
+    # Iterate through each page
+    for page_num in range(document.page_count):
+        page = document.load_page(page_num)
+        text += page.get_text()
+    return text
+
+def parse_text(text):
+    # Use regex to find the line containing 'Arinsun_RUMS' and the subsequent data line
+    pattern = r"Arinsun_RUMS\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)"
+    match = re.search(pattern, text)
+    
+    if match:
+        re_generator = "Arinsun_RUMS"
+        schedule_mu = match.group(1)
+        actual_mu = match.group(2)
+        deviation_mu = match.group(3)
+        return [[re_generator, schedule_mu, actual_mu, deviation_mu]]
+    else:
+        return []
+
+def create_dataframe(data):
+    # Create a DataFrame from the parsed data
+    df = pd.DataFrame(data, columns=['RE Generator', 'Schedule (MU)', 'Actual (MU)', 'Deviation (MU)'])
+    return df
+
+# Loop through each month-year combination, fetch the PDF, extract and display the data
 for month, year in month_year_range(start_month, start_year, end_month, end_year):
-    fetch_pdf(month, year)
+    pdf_path = fetch_pdf(month, year)
+    if pdf_path:
+        text = extract_text_from_pdf(pdf_path)
+        data = parse_text(text)
+        if data:
+            df = create_dataframe(data)
+            print(f"Data for {months[month]} {year}:")
+            print(df)
+        else:
+            print(f"No data found for {months[month]} {year}")
+        print("\n")
+        os.remove(pdf_path)  # Clean up the temporary PDF file

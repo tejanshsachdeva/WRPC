@@ -17,17 +17,14 @@ def extract_arinsun_data(pdf_path, table_header, search_term):
                     if match:
                         return f"{search_term} {match.group(1)} {match.group(2)} {match.group(3)}"
                 if in_target_table and line.strip() == '':
-                    in_target_table = False  # Assume we've exited the table if we hit an empty line
+                    in_target_table = False  #
     return None
 
-# Define the PDF path, table header, and search term
 pdf_path = r"C:\Users\tejan\Downloads\readec23.pdf"
 table_header = "RE Generator Schedule (MU) Actual (MU) Deviation (MU)"
 search_term = "Arinsun_RUMS"
-# Extract the data
 arinsun_data = extract_arinsun_data(pdf_path, table_header, search_term)
 
-# Print the result to the console
 if arinsun_data:
     print(arinsun_data)
 else:

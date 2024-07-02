@@ -56,19 +56,24 @@ def extract_text_from_pdf(pdf_path):
         text += page.get_text()
     return text
 
+
+# Function to parse the text and extract data using regex
 def parse_text(text):
-    # Use regex to find the line containing 'Arinsun_RUMS' and the subsequent data line
-    pattern = r"Arinsun_RUMS\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)"
-    match = re.search(pattern, text)
+    # Use regex to find lines containing generator names and their respective data
+    pattern = r"(\S+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)"
+    matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
     
-    if match:
-        re_generator = "Arinsun_RUMS"
-        schedule_mu = match.group(1)
-        actual_mu = match.group(2)
-        deviation_mu = match.group(3)
-        return [[re_generator, schedule_mu, actual_mu, deviation_mu]]
-    else:
-        return []
+    data = []
+    for match in matches:
+        generator = match[0]
+        schedule_mu = match[1]
+        actual_mu = match[2]
+        deviation_mu = match[3]
+        if generator.lower().startswith('arinsun'):
+            data.append(['Arinsun_RUMS', schedule_mu, actual_mu, deviation_mu])
+
+    return data
+
 
 def create_dataframe(data):
     # Create a DataFrame from the parsed data

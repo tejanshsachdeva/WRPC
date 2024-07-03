@@ -33,13 +33,6 @@ def fetch_pdfs_for_year(year):
             else:
                 print(f"Invalid line format: {line}")
         
-        if pdf_urls:
-            print("List of PDFs for the year {}: ".format(year))
-            for idx, url in enumerate(pdf_urls):
-                print(f"{idx}. {url}")
-        else:
-            print(f"No PDF URLs found for year {year}")
-        
         return pdf_urls
     else:
         print(f"Failed to fetch data for year {year}")
@@ -119,10 +112,21 @@ def display_results(results, summary_rows, search_term):
     print(f"Total results found: {len(results) + len(summary_rows)}")
 
 # Example usage:
-year = input("Enter the year (e.g., 2023): ")
-pdf_urls = fetch_pdfs_for_year(year)
+years = input("Enter the years (e.g., 2023,2024): ").split(',')
+all_pdf_urls = []
+index_offset = 0
 
-if pdf_urls:
+for year in years:
+    year = year.strip()
+    pdf_urls = fetch_pdfs_for_year(year)
+    if pdf_urls:
+        print(f"List of PDFs for the year {year}: ")
+        for idx, url in enumerate(pdf_urls):
+            print(f"{index_offset + idx}. {url}")
+        index_offset += len(pdf_urls)
+        all_pdf_urls.extend(pdf_urls)
+
+if all_pdf_urls:
     indices = input("Enter the indices of the PDFs to search (e.g., 0,1,2): ")
     indices = list(map(int, indices.split(',')))
     search_term = input("Enter the name to search for (e.g., Athena_RUMS): ")
@@ -130,7 +134,7 @@ if pdf_urls:
     all_results = []
     all_summary_rows = []
     for index in indices:
-        pdf_url = pdf_urls[index]
+        pdf_url = all_pdf_urls[index]
         results, summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
         all_results.extend(results)
         all_summary_rows.extend(summary_rows)

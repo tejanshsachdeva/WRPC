@@ -2,6 +2,7 @@ import requests
 import pdfplumber
 from tabulate import tabulate
 from io import BytesIO
+from datetime import datetime
 
 def fetch_pdfs_for_year(year):
     year_data_url = f'https://www.wrpc.gov.in/assets/data/UI_{year}.txt'
@@ -50,6 +51,9 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
         pdf_file = BytesIO(response.content)
         with pdfplumber.open(pdf_file) as pdf:
             all_rows = []
+            summary_rows = []
+            week = pdf_url.split('/')[-2]  # Extract week from URL
+            week_name = f"week-{week[-1]} {week[:-1]}"
             for page in pdf.pages:
                 text = page.extract_text()
                 print(f"Checking page {page.page_number}...")
@@ -61,7 +65,9 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                             print(f"Processing line: {line}")
                             if i > 0 and "Sr." in lines[i - 1]:
                                 headers1 = "Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
-                                all_rows.append((headers1, line.split()))
+                                row = line.split()
+                                row[0] = week_name  # Replace Sr. with week name
+                                summary_rows.append((headers1, row))
                                 print(f"Added row with header: {headers1}")
                             elif "Daywise Summary" in line:
                                 headers2 = line
@@ -71,24 +77,24 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                                 break  # Stop processing after adding daywise summary
                             elif not any(header in line for header in ["Daywise Summary", "Date Entity", "Total"]):
                                 # Capture any other lines containing the search term
-                                all_rows.append(("Summary Row", line.split()))
+                                summary_rows.append(("Summary Row", line.split()))
                                 print(f"Added summary row: {line}")
-            return all_rows
+            return all_rows, summary_rows
     else:
         print(f"Failed to fetch the PDF from URL: {pdf_url}")
-        return []
+        return [], []
 
-def display_results(results, search_term):
-    if results:
+def display_results(results, summary_rows, search_term):
+    if results or summary_rows:
         print(f"\nResults found for '{search_term}':")
 
         # Separate summary rows and daywise summary rows
-        summary_rows = [(headers, row) for headers, row in results if headers == "Summary Row" or "Sr." in headers]
+        summary_rows = [(headers, row) for headers, row in summary_rows if headers == "Summary Row" or "Sr." in headers]
         daywise_rows = [(headers, row) for headers, row in results if headers.startswith("Daywise Summary")]
 
         if summary_rows:
             print("\nSummary Rows:")
-            headers1 = "Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
+            headers1 = "Week || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
             for headers, row in summary_rows:
                 print(tabulate([row], headers=headers1.split(" || "), tablefmt="grid"))
                 print("\n")
@@ -97,14 +103,20 @@ def display_results(results, search_term):
         if daywise_rows:
             print("\nDaywise Summary Rows:")
             headers2 = "Date || Entity || Injection || Schedule || DSM Payable || DSM Receivable || Net DMC"
+            all_daywise_rows = []
             for headers, rows in daywise_rows:
-                print(tabulate(rows, headers=headers2.split(" || "), tablefmt="grid"))
-                print("\n")
+                all_daywise_rows.extend(rows)
+            
+            # Sort by date
+            all_daywise_rows.sort(key=lambda x: datetime.strptime(x[0], "%d-%b"))
+
+            print(tabulate(all_daywise_rows, headers=headers2.split(" || "), tablefmt="grid"))
+            print("\n")
     else:
         print(f"No results found for '{search_term}'.")
 
     # Print the number of results
-    print(f"Total results found: {len(results)}")
+    print(f"Total results found: {len(results) + len(summary_rows)}")
 
 # Example usage:
 year = input("Enter the year (e.g., 2023): ")
@@ -116,9 +128,11 @@ if pdf_urls:
     search_term = input("Enter the name to search for (e.g., Athena_RUMS): ")
     
     all_results = []
+    all_summary_rows = []
     for index in indices:
         pdf_url = pdf_urls[index]
-        results = extract_all_table_rows_from_url(pdf_url, search_term)
+        results, summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
         all_results.extend(results)
+        all_summary_rows.extend(summary_rows)
     
-    display_results(all_results, search_term)
+    display_results(all_results, all_summary_rows, search_term)

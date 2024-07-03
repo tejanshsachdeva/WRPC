@@ -34,8 +34,8 @@ def fetch_pdfs_for_year(year):
         
         if pdf_urls:
             print("List of PDFs for the year {}: ".format(year))
-            for url in pdf_urls:
-                print(url)
+            for idx, url in enumerate(pdf_urls):
+                print(f"{idx}. {url}")
         else:
             print(f"No PDF URLs found for year {year}")
         
@@ -111,13 +111,14 @@ year = input("Enter the year (e.g., 2023): ")
 pdf_urls = fetch_pdfs_for_year(year)
 
 if pdf_urls:
-    pdf_identifier = input("Enter the PDF identifier (e.g., jan23/sum2.pdf): ")
+    indices = input("Enter the indices of the PDFs to search (e.g., 0,1,2): ")
+    indices = list(map(int, indices.split(',')))
     search_term = input("Enter the name to search for (e.g., Athena_RUMS): ")
     
-    for pdf_url in pdf_urls:
-        if pdf_identifier in pdf_url:
-            results = extract_all_table_rows_from_url(pdf_url, search_term)
-            display_results(results, search_term)
-            break
-    else:
-        print(f"No PDF found with the identifier {pdf_identifier} in the year {year}")
+    all_results = []
+    for index in indices:
+        pdf_url = pdf_urls[index]
+        results = extract_all_table_rows_from_url(pdf_url, search_term)
+        all_results.extend(results)
+    
+    display_results(all_results, search_term)

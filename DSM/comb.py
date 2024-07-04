@@ -1,8 +1,9 @@
+import streamlit as st
 import requests
 import pdfplumber
-from tabulate import tabulate
 from io import BytesIO
 from datetime import datetime
+import pandas as pd
 
 def fetch_pdfs_for_year(year):
     year_data_url = f'https://www.wrpc.gov.in/assets/data/UI_{year}.txt'
@@ -19,23 +20,21 @@ def fetch_pdfs_for_year(year):
             if len(pdf_details) >= 3:
                 file_info = pdf_details[2]
                 
-                # Extract month, year, and week from the file_info
                 parts = file_info.split('&yy=')
                 if len(parts) == 2:
                     week = parts[0].split('=')[1]
                     month_year = parts[1].split('.')[0]
                     
-                    # Construct the PDF URL
                     pdf_url = f'https://www.wrpc.gov.in/htm/{month_year}/sum{week}.pdf'
                     pdf_urls.append(pdf_url)
                 else:
-                    print(f"Invalid data format: {file_info}")
+                    st.warning(f"Invalid data format: {file_info}")
             else:
-                print(f"Invalid line format: {line}")
+                st.warning(f"Invalid line format: {line}")
         
         return pdf_urls
     else:
-        print(f"Failed to fetch data for year {year}")
+        st.error(f"Failed to fetch data for year {year}")
         return []
 
 def extract_all_table_rows_from_url(pdf_url, search_term):
@@ -45,98 +44,128 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
         with pdfplumber.open(pdf_file) as pdf:
             all_rows = []
             summary_rows = []
-            week = pdf_url.split('/')[-2]  # Extract week from URL
+            week = pdf_url.split('/')[-2]
             week_name = f"week-{week[-1]} {week[:-1]}"
             for page in pdf.pages:
                 text = page.extract_text()
-                print(f"Checking page {page.page_number}...")
                 if search_term in text:
-                    print(f"Found '{search_term}' on page {page.page_number}.")
                     lines = text.split('\n')
                     for i, line in enumerate(lines):
                         if search_term in line:
-                            print(f"Processing line: {line}")
                             if i > 0 and "Sr." in lines[i - 1]:
                                 headers1 = "Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
                                 row = line.split()
-                                row[0] = week_name  # Replace Sr. with week name
+                                row[0] = week_name
                                 summary_rows.append((headers1, row))
-                                print(f"Added row with header: {headers1}")
                             elif "Daywise Summary" in line:
                                 headers2 = line
-                                daywise_data = [row.split() for row in lines[i + 2:i + 9] if row.strip()]  # Adjust indices to skip headers and get data rows
+                                daywise_data = [row.split() for row in lines[i + 2:i + 9] if row.strip()]
                                 all_rows.append((headers2, daywise_data))
-                                print(f"Added daywise summary with header: {headers2}")
-                                break  # Stop processing after adding daywise summary
+                                break
                             elif not any(header in line for header in ["Daywise Summary", "Date Entity", "Total"]):
-                                # Capture any other lines containing the search term
                                 summary_rows.append(("Summary Row", line.split()))
-                                print(f"Added summary row: {line}")
             return all_rows, summary_rows
     else:
-        print(f"Failed to fetch the PDF from URL: {pdf_url}")
+        st.error(f"Failed to fetch the PDF from URL: {pdf_url}")
         return [], []
 
 def display_results(results, summary_rows, search_term):
     if results or summary_rows:
-        print(f"\nResults found for '{search_term}':")
+        st.success(f"\nResults found for '{search_term}':")
 
-        # Separate summary rows and daywise summary rows
         summary_rows = [(headers, row) for headers, row in summary_rows if headers == "Summary Row" or "Sr." in headers]
         daywise_rows = [(headers, row) for headers, row in results if headers.startswith("Daywise Summary")]
 
         if summary_rows:
-            print("\nSummary Rows:")
-            headers1 = "Week || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
-            for headers, row in summary_rows:
-                print(tabulate([row], headers=headers1.split(" || "), tablefmt="grid"))
-                print("\n")
+            st.subheader("Summary Rows:")
+            headers1 = ["Week", "Name of Entity", "Payable", "Receivable", "Net DSM (Rs.)", "Payable/Receivable"]
+            summary_data = [row for headers, row in summary_rows if headers == "Summary Row"]
+            summary_df = pd.DataFrame(summary_data, columns=headers1)
+            st.dataframe(summary_df)
 
-        # Print Daywise Summary Rows
         if daywise_rows:
-            print("\nDaywise Summary Rows:")
-            headers2 = "Date || Entity || Injection || Schedule || DSM Payable || DSM Receivable || Net DMC"
-            all_daywise_rows = []
-            for headers, rows in daywise_rows:
-                all_daywise_rows.extend(rows)
-            
-            # Sort by date
-            all_daywise_rows.sort(key=lambda x: datetime.strptime(x[0], "%d-%b"))
-
-            print(tabulate(all_daywise_rows, headers=headers2.split(" || "), tablefmt="grid"))
-            print("\n")
+            st.subheader("Daywise Summary Rows:")
+            headers2 = ["Date", "Entity", "Injection", "Schedule", "DSM Payable", "DSM Receivable", "Net DMC"]
+            daywise_data = [row for headers, rows in daywise_rows for row in rows]
+            daywise_df = pd.DataFrame(daywise_data, columns=headers2)
+            try:
+                # Convert 'Date' column to datetime, then format it back to string
+                daywise_df['Date'] = pd.to_datetime(daywise_df['Date'], format='%d-%b')
+                daywise_df['Date'] = daywise_df['Date'].dt.strftime('%d %B')
+                daywise_df = daywise_df.sort_values('Date')
+            except ValueError as e:
+                st.warning(f"Date parsing error: {e}")
+            st.dataframe(daywise_df)
     else:
-        print(f"No results found for '{search_term}'.")
+        st.warning(f"No results found for '{search_term}'.")
 
-    # Print the number of results
-    print(f"Total results found: {len(results) + len(summary_rows)}")
+    st.info(f"Total results found: {len(results) + len(summary_rows)}")
 
-# Example usage:
-years = input("Enter the years (e.g., 2023,2024): ").split(',')
+def convert_to_excel(summary_rows, daywise_rows):
+    summary_headers = ["Week", "Name of Entity", "Payable", "Receivable", "Net DSM (Rs.)", "Payable/Receivable"]
+    daywise_headers = ["Date", "Entity", "Injection", "Schedule", "DSM Payable", "DSM Receivable", "Net DMC"]
+
+    summary_data = [row for headers, row in summary_rows if headers == "Summary Row"]
+    daywise_data = [row for headers, rows in daywise_rows for row in rows]
+
+    summary_df = pd.DataFrame(summary_data, columns=summary_headers)
+    daywise_df = pd.DataFrame(daywise_data, columns=daywise_headers)
+
+    buffer = BytesIO()
+    try:
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            summary_df.to_excel(writer, sheet_name="Summary Rows", index=False)
+            daywise_df.to_excel(writer, sheet_name="Daywise Summary Rows", index=False)
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        st.error(f"An error occurred while creating the Excel file: {e}")
+        return None
+
+# Streamlit App
+st.title("PDF Data Extractor")
+
 all_pdf_urls = []
-index_offset = 0
 
-for year in years:
-    year = year.strip()
-    pdf_urls = fetch_pdfs_for_year(year)
-    if pdf_urls:
-        print(f"List of PDFs for the year {year}: ")
-        for idx, url in enumerate(pdf_urls):
-            print(f"{index_offset + idx}. {url}")
-        index_offset += len(pdf_urls)
-        all_pdf_urls.extend(pdf_urls)
+years_input = st.text_input("Enter the years (e.g., 2023,2024):")
+if years_input:
+    years = years_input.split(',')
+    index_offset = 0
+
+    for year in years:
+        year = year.strip()
+        pdf_urls = fetch_pdfs_for_year(year)
+        if pdf_urls:
+            with st.expander(f"List of PDFs for the year {year}: "):
+                for idx, url in enumerate(pdf_urls):
+                    st.write(f"{index_offset + idx}. {url}")
+            index_offset += len(pdf_urls)
+            all_pdf_urls.extend(pdf_urls)
 
 if all_pdf_urls:
-    indices = input("Enter the indices of the PDFs to search (e.g., 0,1,2): ")
-    indices = list(map(int, indices.split(',')))
-    search_term = input("Enter the name to search for (e.g., Athena_RUMS): ")
-    
-    all_results = []
-    all_summary_rows = []
-    for index in indices:
-        pdf_url = all_pdf_urls[index]
-        results, summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
-        all_results.extend(results)
-        all_summary_rows.extend(summary_rows)
-    
-    display_results(all_results, all_summary_rows, search_term)
+    indices_input = st.text_input("Enter the indices of the PDFs to search (e.g., 0,1,2):")
+    if indices_input:
+        try:
+            indices = list(map(int, indices_input.split(',')))
+            search_term = st.text_input("Enter the name to search for (e.g., Athena_RUMS):")
+            if search_term:
+                all_results = []
+                all_summary_rows = []
+                for index in indices:
+                    pdf_url = all_pdf_urls[index]
+                    results, summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
+                    all_results.extend(results)
+                    all_summary_rows.extend(summary_rows)
+                
+                display_results(all_results, all_summary_rows, search_term)
+
+                if st.button("Download as Excel"):
+                    excel_buffer = convert_to_excel(all_summary_rows, all_results)
+                    if excel_buffer:
+                        st.download_button(label="Download Excel file", data=excel_buffer, file_name="extracted_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except ValueError as e:
+            st.error(f"Invalid indices input. Please enter a comma-separated list of numbers. Error: {e}")
+        except IndexError as e:
+            st.error(f"One or more indices are out of range. Error: {e}")
+        except Exception as e:
+            st.error(f"An unexpected error occurred. Error: {e}")

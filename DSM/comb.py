@@ -46,9 +46,12 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
             summary_rows = []
             week = pdf_url.split('/')[-2]
             week_name = f"week-{week[-1]} {week[:-1]}"
-            for page in pdf.pages:
+            found_in_first_nine_pages = False
+            for page_num, page in enumerate(pdf.pages):
                 text = page.extract_text()
                 if search_term in text:
+                    if page_num < 9:
+                        found_in_first_nine_pages = True
                     lines = text.split('\n')
                     for i, line in enumerate(lines):
                         if search_term in line:
@@ -64,6 +67,8 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                                 break
                             elif not any(header in line for header in ["Daywise Summary", "Date Entity", "Total"]):
                                 summary_rows.append(("Summary Row", line.split()))
+            if not found_in_first_nine_pages:
+                summary_rows = []
             return all_rows, summary_rows
     else:
         st.error(f"Failed to fetch the PDF from URL: {pdf_url}")

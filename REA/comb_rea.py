@@ -103,50 +103,58 @@ def convert_to_excel(summary_rows):
         st.error(f"An error occurred while creating the Excel file: {e}")
         return None
 
-# Streamlit App
-st.title("Scheduled Revenue Energy (SRE) Data Extractor")
+def main():
+    # Streamlit App
+    st.title("Scheduled Revenue Energy (SRE) Data Extractor")
 
-all_pdf_urls = []
-all_pdf_names = []
+    if st.button("Back to Home"):
+        st.session_state.app_choice = None
+        st.experimental_rerun()
 
-years_input = st.text_input("Enter the years (e.g., 2022,2023):")
-if years_input:
-    years = years_input.split(',')
-    index_offset = 0
+    all_pdf_urls = []
+    all_pdf_names = []
 
-    for year in years:
-        year = year.strip()
-        pdf_urls, pdf_names = fetch_pdfs_for_year(year)
-        if pdf_urls:
-            with st.expander(f"List of PDFs for the year {year}: "):
-                for idx, (url, name) in enumerate(zip(pdf_urls, pdf_names)):
-                    st.write(f"{index_offset + idx}. {name} ({url})")
-            index_offset += len(pdf_urls)
-            all_pdf_urls.extend(pdf_urls)
-            all_pdf_names.extend(pdf_names)
+    years_input = st.text_input("Enter the years (e.g., 2022,2023):")
+    if years_input:
+        years = years_input.split(',')
+        index_offset = 0
 
-if all_pdf_urls:
-    indices_input = st.text_input("Enter the indices of the PDFs to search (e.g., 0,1,2):")
-    if indices_input:
-        try:
-            indices = list(map(int, indices_input.split(',')))
-            search_term = st.text_input("Enter the name to search for (e.g., Arinsun_RUMS):")
-            if search_term:
-                all_summary_rows = []
-                for index in indices:
-                    pdf_url = all_pdf_urls[index]
-                    summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
-                    all_summary_rows.extend(summary_rows)
-                
-                display_results(all_summary_rows, search_term)
+        for year in years:
+            year = year.strip()
+            pdf_urls, pdf_names = fetch_pdfs_for_year(year)
+            if pdf_urls:
+                with st.expander(f"List of PDFs for the year {year}: "):
+                    for idx, (url, name) in enumerate(zip(pdf_urls, pdf_names)):
+                        st.write(f"{index_offset + idx}. {name} ({url})")
+                index_offset += len(pdf_urls)
+                all_pdf_urls.extend(pdf_urls)
+                all_pdf_names.extend(pdf_names)
 
-                if st.button("Download as Excel"):
-                    excel_buffer = convert_to_excel(all_summary_rows)
-                    if excel_buffer:
-                        st.download_button(label="Download Excel file", data=excel_buffer, file_name="extracted_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except ValueError as e:
-            st.error(f"Invalid indices input. Please enter a comma-separated list of numbers. Error: {e}")
-        except IndexError as e:
-            st.error(f"One or more indices are out of range. Error: {e}")
-        except Exception as e:
-            st.error(f"An unexpected error occurred. Error: {e}")
+    if all_pdf_urls:
+        indices_input = st.text_input("Enter the indices of the PDFs to search (e.g., 0,1,2):")
+        if indices_input:
+            try:
+                indices = list(map(int, indices_input.split(',')))
+                search_term = st.text_input("Enter the name to search for (e.g., Arinsun_RUMS):")
+                if search_term:
+                    all_summary_rows = []
+                    for index in indices:
+                        pdf_url = all_pdf_urls[index]
+                        summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
+                        all_summary_rows.extend(summary_rows)
+                    
+                    display_results(all_summary_rows, search_term)
+
+                    if st.button("Download as Excel"):
+                        excel_buffer = convert_to_excel(all_summary_rows)
+                        if excel_buffer:
+                            st.download_button(label="Download Excel file", data=excel_buffer, file_name="extracted_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except ValueError as e:
+                st.error(f"Invalid indices input. Please enter a comma-separated list of numbers. Error: {e}")
+            except IndexError as e:
+                st.error(f"One or more indices are out of range. Error: {e}")
+            except Exception as e:
+                st.error(f"An unexpected error occurred. Error: {e}")
+
+if __name__ == "__main__":
+    main()

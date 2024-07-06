@@ -133,7 +133,7 @@ def main():
 
     if st.button("Back to Home"):
         st.session_state.app_choice = None
-        st.experimental_rerun()
+        st.rerun()
 
     all_pdf_urls = []
 

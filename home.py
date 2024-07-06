@@ -15,6 +15,16 @@ def home():
         st.session_state.app_choice = "REA"
         st.rerun()
 
+# Link to styles.css to hide GitHub corner
+st.markdown(
+    """
+    <style>
+    {% include 'styles.css' %}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Initialize session state
 if 'app_choice' not in st.session_state:
     st.session_state.app_choice = None

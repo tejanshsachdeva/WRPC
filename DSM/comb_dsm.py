@@ -37,6 +37,15 @@ def fetch_pdfs_for_year(year):
         st.error(f"Failed to fetch data for year {year}")
         return []
 
+def filter_summary_rows(summary_rows):
+    # Function to filter out unwanted summary rows
+    filtered_rows = []
+    for headers, row in summary_rows:
+        if not any(keyword in row for keyword in ["WRPC", "Daywise Summary", "Date Entity", "Total", "-", ":", "to", "Page"]):
+            filtered_rows.append((headers, row))
+    return filtered_rows
+
+
 def extract_all_table_rows_from_url(pdf_url, search_term):
     response = requests.get(pdf_url)
     if response.status_code == 200:
@@ -59,20 +68,37 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                                 headers1 = "Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
                                 row = line.split()
                                 row[0] = week_name
+                                if len(row) != 6:  # Adjust this check based on actual column count
+                                    print(f"Irrelevant line (invalid columns): {line}")  # Debug print
+                                    continue
                                 summary_rows.append((headers1, row))
                             elif "Daywise Summary" in line:
                                 headers2 = line
-                                daywise_data = [row.split() for row in lines[i + 2:i + 9] if row.strip()]
+                                daywise_data = []
+                                for j in range(i + 2, min(i + 9, len(lines))):
+                                    daywise_row = lines[j].split()
+                                    if len(daywise_row) != 7:  # Adjust this check based on actual column count
+                                        print(f"Irrelevant daywise data (invalid columns): {lines[j]}")  # Debug print
+                                        continue
+                                    daywise_data.append(daywise_row)
+                                print(f"Daywise Data: {daywise_data}")  # Debug print
                                 all_rows.append((headers2, daywise_data))
                                 break
-                            elif not any(header in line for header in ["Daywise Summary", "Date Entity", "Total"]):
+                            elif any(keyword in line for keyword in ["-", ":", "to", "Page"]):
+                                continue
+                            elif any(keyword in line for keyword in ["WRPC", "Daywise Summary", "Date Entity", "Total"]):
+                                continue
+                            else:
+                                print(f"Irrelevant line: {line}")  # Debug print
                                 summary_rows.append(("Summary Row", line.split()))
             if not found_in_first_nine_pages:
                 summary_rows = []
+
             return all_rows, summary_rows
     else:
         st.error(f"Failed to fetch the PDF from URL: {pdf_url}")
         return [], []
+
 
 def display_results(results, summary_rows, search_term):
     if results or summary_rows:
@@ -115,6 +141,7 @@ def convert_to_excel(summary_rows, daywise_rows):
 
     summary_df = pd.DataFrame(summary_data, columns=summary_headers)
     daywise_df = pd.DataFrame(daywise_data, columns=daywise_headers)
+    
 
     buffer = BytesIO()
     try:

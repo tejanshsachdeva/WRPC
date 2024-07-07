@@ -45,7 +45,6 @@ def filter_summary_rows(summary_rows):
             filtered_rows.append((headers, row))
     return filtered_rows
 
-
 def extract_all_table_rows_from_url(pdf_url, search_term):
     response = requests.get(pdf_url)
     if response.status_code == 200:
@@ -56,25 +55,31 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
             week = pdf_url.split('/')[-2]
             week_name = f"week-{week[-1]} {week[:-1]}"
             found_in_first_nine_pages = False
+            daywise_data = []  # Accumulator for daywise data across pages
+            in_daywise_section = False  # Flag to indicate if currently in daywise section
+            
             for page_num, page in enumerate(pdf.pages):
                 text = page.extract_text()
                 if search_term in text:
                     if page_num < 9:
                         found_in_first_nine_pages = True
                     lines = text.split('\n')
+                    
                     for i, line in enumerate(lines):
                         if search_term in line:
                             if i > 0 and "Sr." in lines[i - 1]:
                                 headers1 = "Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
                                 row = line.split()
                                 row[0] = week_name
-                                if len(row) != 6:  # Adjust this check based on actual column count
+                                if len(row) != 7:  # Adjust this check based on actual column count
                                     print(f"Irrelevant line (invalid columns): {line}")  # Debug print
                                     continue
                                 summary_rows.append((headers1, row))
                             elif "Daywise Summary" in line:
                                 headers2 = line
+                                in_daywise_section = True
                                 daywise_data = []
+                                # Skip header line and continue to capture daywise data until end or new section
                                 for j in range(i + 2, min(i + 9, len(lines))):
                                     daywise_row = lines[j].split()
                                     if len(daywise_row) != 7:  # Adjust this check based on actual column count
@@ -83,14 +88,25 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                                     daywise_data.append(daywise_row)
                                 print(f"Daywise Data: {daywise_data}")  # Debug print
                                 all_rows.append((headers2, daywise_data))
-                                break
+                                in_daywise_section = False
                             elif any(keyword in line for keyword in ["-", ":", "to", "Page"]):
                                 continue
                             elif any(keyword in line for keyword in ["WRPC", "Daywise Summary", "Date Entity", "Total"]):
                                 continue
+                            elif in_daywise_section:
+                                daywise_row = line.split()
+                                if len(daywise_row) != 7:  # Adjust this check based on actual column count
+                                    print(f"Irrelevant daywise data (invalid columns): {line}")  # Debug print
+                                    continue
+                                daywise_data.append(daywise_row)
                             else:
                                 print(f"Irrelevant line: {line}")  # Debug print
                                 summary_rows.append(("Summary Row", line.split()))
+
+                    # If we are in daywise section and accumulated data, update all_rows
+                    if in_daywise_section and daywise_data:
+                        all_rows.append((headers2, daywise_data))
+
             if not found_in_first_nine_pages:
                 summary_rows = []
 

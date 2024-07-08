@@ -209,15 +209,15 @@ def main():
         filtered_summary_rows = filter_summary_rows(all_summary_rows)
         display_results(all_results, filtered_summary_rows, search_term)
 
-        if st.button("Convert to Excel"):
-            excel_data = convert_to_excel(filtered_summary_rows, all_results)
-            if excel_data:
-                st.download_button(
-                    label="Download Excel",
-                    data=excel_data,
-                    file_name="dsm_data.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+        # if st.button("Convert to Excel"):
+        #     excel_data = convert_to_excel(filtered_summary_rows, all_results)
+        #     if excel_data:
+        #         st.download_button(
+        #             label="Download Excel",
+        #             data=excel_data,
+        #             file_name="dsm_data.xlsx",
+        #             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        #         )
 
 if __name__ == "__main__":
     main()

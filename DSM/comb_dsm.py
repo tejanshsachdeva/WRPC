@@ -196,7 +196,7 @@ def main():
                 if st.checkbox(url, key=f'pdf_{idx}'):
                     selected_pdfs.append(url)
 
-    search_term = st.text_input("Enter the name to search for (e.g., Athena_RUMS):")
+    search_term = st.text_input("Enter the name to search for (e.g., Arinsun_RUMS):")
 
     if st.button("Search") and selected_pdfs and search_term:
         all_results = []

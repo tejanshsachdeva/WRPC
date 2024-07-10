@@ -11,6 +11,7 @@ def fetch_pdfs_for_year(year):
     if year_data_response.status_code == 200:
         pdf_data_lines = year_data_response.text.strip().split('\n')
         pdf_urls = []
+        pdf_names = []
         for line in pdf_data_lines:
             if line.strip().startswith('//') or not line.strip():
                 continue
@@ -25,34 +26,26 @@ def fetch_pdfs_for_year(year):
                     month_year = parts[1].split('.')[0]
                     
                     pdf_url = f'https://www.wrpc.gov.in/htm/{month_year}/sum{week}.pdf'
+                    pdf_name = f"week-{week[-1]} {week[:-1]}"
                     pdf_urls.append(pdf_url)
+                    pdf_names.append(pdf_name)
                 else:
                     st.warning(f"Invalid data format: {file_info}")
             else:
                 st.warning(f"Invalid line format: {line}")
         
-        return pdf_urls
+        return pdf_urls, pdf_names
     else:
         st.error(f"Failed to fetch data for year {year}")
-        return []
+        return [], []
 
-def filter_summary_rows(summary_rows):
-    # Function to filter out unwanted summary rows
-    filtered_rows = []
-    for headers, row in summary_rows:
-        if not any(keyword in row for keyword in ["WRPC", "Daywise Summary", "Date Entity", "Total", "-", ":", "to", "Page"]):
-            filtered_rows.append((headers, row))
-    return filtered_rows
-
-def extract_all_table_rows_from_url(pdf_url, search_term):
+def extract_all_table_rows_from_url(pdf_url, pdf_name, search_term):
     response = requests.get(pdf_url)
     if response.status_code == 200:
         pdf_file = BytesIO(response.content)
         with pdfplumber.open(pdf_file) as pdf:
             all_rows = []
             summary_rows = []
-            week = pdf_url.split('/')[-2]
-            week_name = f"week-{week[-1]} {week[:-1]}"
             found_in_first_nine_pages = False
             daywise_data = []  # Accumulator for daywise data across pages
             in_daywise_section = False  # Flag to indicate if currently in daywise section
@@ -67,10 +60,10 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                     for i, line in enumerate(lines):
                         if search_term in line:
                             if i > 0 and "Sr." in lines[i - 1]:
-                                headers1 = "Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
+                                headers1 = "PDF Name || Sr. || Name of Entity || Payable || Receivable || Net DSM (Rs.) || Payable/Receivable"
                                 row = line.split()
-                                row[0] = week_name
-                                if len(row) != 7:  # Adjust this check based on actual column count
+                                row.insert(0, pdf_name)  # Add PDF name at the beginning
+                                if len(row) != 8:  # Adjust this check based on actual column count
                                     print(f"Irrelevant line (invalid columns): {line}")  # Debug print
                                     continue
                                 summary_rows.append((headers1, row))
@@ -100,8 +93,10 @@ def extract_all_table_rows_from_url(pdf_url, search_term):
                                 daywise_data.append(daywise_row)
                             else:
                                 print(f"Irrelevant line: {line}")  # Debug print
-                                summary_rows.append(("Summary Row", line.split()))
-
+                                row = line.split()
+                                row.insert(0, pdf_name)  # Add PDF name at the beginning
+                                summary_rows.append(("Summary Row", row))
+                                
                     # If we are in daywise section and accumulated data, update all_rows
                     if in_daywise_section and daywise_data:
                         all_rows.append((headers2, daywise_data))
@@ -123,7 +118,7 @@ def display_results(results, summary_rows, search_term):
 
         if summary_rows:
             st.subheader("Summary Rows:")
-            headers1 = ["Week", "Name of Entity", "Payable", "Receivable", "Net DSM (Rs.)", "Payable/Receivable"]
+            headers1 = ["PDF Name", "Sr.", "Name of Entity", "Payable", "Receivable", "Net DSM (Rs.)", "Payable/Receivable"]
             summary_data = [row for headers, row in summary_rows if headers == "Summary Row"]
             summary_df = pd.DataFrame(summary_data, columns=headers1)
             st.dataframe(summary_df)
@@ -147,7 +142,7 @@ def display_results(results, summary_rows, search_term):
     st.info(f"Total results found: {len(results) + len(summary_rows)}")
 
 def convert_to_excel(summary_rows, daywise_rows):
-    summary_headers = ["Week", "Name of Entity", "Payable", "Receivable", "Net DSM (Rs.)", "Payable/Receivable"]
+    summary_headers = ["PDF Name", "Sr.", "Name of Entity", "Payable", "Receivable", "Net DSM (Rs.)", "Payable/Receivable"]
     daywise_headers = ["Date", "Entity", "Injection", "Schedule", "DSM Payable", "DSM Receivable", "Net DMC"]
 
     summary_data = [row for headers, row in summary_rows if headers == "Summary Row"]
@@ -176,6 +171,8 @@ def main():
         st.rerun()
 
     all_pdf_urls = []
+    all_pdf_names = []
+
 
     years_input = st.text_input("Enter the years (e.g., 2023,2024):")
     if years_input:
@@ -183,8 +180,10 @@ def main():
         for year in years:
             year = year.strip()
             if year.isdigit():
-                year_pdf_urls = fetch_pdfs_for_year(int(year))
-                all_pdf_urls.extend(year_pdf_urls)
+                pdf_urls, pdf_names = fetch_pdfs_for_year(year)
+                all_pdf_urls.extend(pdf_urls)
+                all_pdf_names.extend(pdf_names)
+
 
     selected_pdfs = st.multiselect("Choose PDFs to search for the keyword:", all_pdf_urls)
 
@@ -193,10 +192,10 @@ def main():
         all_results = []
         all_summary_rows = []
         for pdf_url in selected_pdfs:
-            pdf_name = pdf_url.split('/')[-1]  # Extract PDF name from URL
-            results, summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
-            all_results.extend(results)
-            all_summary_rows.extend(summary_rows)
+                pdf_name = all_pdf_names[all_pdf_urls.index(pdf_url)]
+                results, summary_rows = extract_all_table_rows_from_url(pdf_url, pdf_name, search_term)
+                all_results.extend(results)
+                all_summary_rows.extend(summary_rows)
 
         if all_results or all_summary_rows:
             display_results(all_results, all_summary_rows, search_term)

@@ -4,7 +4,7 @@ import REA.comb_rea as rea_app
 
 # Define the homepage
 def home():
-    st.title("Welcome to the Data Extractor Tool")
+    st.title("Welcome to the WRPC Data Extractor Tool")
     st.write("Choose the functionality you want to use:")
 
     if st.button("DSM Functionality"):

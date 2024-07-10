@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pdfplumber
 from io import BytesIO
-from datetime import datetime
 import pandas as pd
 
 def fetch_pdfs_for_year(year):
@@ -170,7 +169,6 @@ def convert_to_excel(summary_rows, daywise_rows):
         return None
 
 def main():
-    # Streamlit App
     st.title("Deviation Settlement Mechanism (DSM) Data Extractor")
 
     if st.button("Back to Home"):
@@ -181,43 +179,39 @@ def main():
 
     years_input = st.text_input("Enter the years (e.g., 2023,2024):")
     if years_input:
-        years = years_input.split(',')
+        years = years_input.split(",")
         for year in years:
             year = year.strip()
-            pdf_urls = fetch_pdfs_for_year(year)
-            if pdf_urls:
-                all_pdf_urls.extend(pdf_urls)
+            if year.isdigit():
+                year_pdf_urls = fetch_pdfs_for_year(int(year))
+                all_pdf_urls.extend(year_pdf_urls)
 
-    selected_pdfs = []
-    if all_pdf_urls:
-        st.subheader("Select PDFs to search:")
-        with st.expander("PDF List", expanded=True):
-            for idx, url in enumerate(all_pdf_urls):
-                if st.checkbox(url, key=f'pdf_{idx}'):
-                    selected_pdfs.append(url)
+    selected_pdfs = st.multiselect("Choose PDFs to search for the keyword:", all_pdf_urls)
 
-    search_term = st.text_input("Enter the name to search for (e.g., Arinsun_RUMS):")
-
-    if st.button("Search") and selected_pdfs and search_term:
+    search_term = st.text_input("Enter the keyword to search:")
+    if search_term and selected_pdfs:
         all_results = []
         all_summary_rows = []
         for pdf_url in selected_pdfs:
+            pdf_name = pdf_url.split('/')[-1]  # Extract PDF name from URL
             results, summary_rows = extract_all_table_rows_from_url(pdf_url, search_term)
             all_results.extend(results)
             all_summary_rows.extend(summary_rows)
 
-        filtered_summary_rows = filter_summary_rows(all_summary_rows)
-        display_results(all_results, filtered_summary_rows, search_term)
+        if all_results or all_summary_rows:
+            display_results(all_results, all_summary_rows, search_term)
+            st.info(f"Total PDFs processed: {len(selected_pdfs)}")
 
-        # if st.button("Convert to Excel"):
-        #     excel_data = convert_to_excel(filtered_summary_rows, all_results)
-        #     if excel_data:
-        #         st.download_button(
-        #             label="Download Excel",
-        #             data=excel_data,
-        #             file_name="dsm_data.xlsx",
-        #             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        #         )
+            buffer = convert_to_excel(all_summary_rows, all_results)
+            if buffer:
+                st.download_button(
+                    label="Download Excel",
+                    data=buffer,
+                    file_name="dsm_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.warning(f"No results found for '{search_term}' in the selected PDFs.")
 
 if __name__ == "__main__":
     main()
